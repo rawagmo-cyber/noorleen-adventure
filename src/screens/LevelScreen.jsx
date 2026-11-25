@@ -2,13 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { LEVEL_BY_ID, introKey } from "../data/curriculum.js";
 import { LETTER_BY_CHAR } from "../data/letters.js";
 import { COLOR_BY_ID, SHAPE_BY_ID } from "../data/colorsShapes.js";
-import { NUMBER_BY_VALUE, ITEM_BY_ID, qtyText } from "../data/numbers.js";
-import { helpLine } from "../data/phrases.js";
+import { NUMBER_BY_VALUE, ITEM_BY_ID } from "../data/numbers.js";
 import { useGame } from "../state/GameContext.jsx";
-import { speak, speakSequence, ensureVoices, cancel } from "../services/speech.js";
+import { playClips, replayInstruction, speakDeviceText, preloadClips, cancel } from "../audio/audioService.ts";
+import { numKey, qtyClips, HELP_KEY } from "../audio/clips.js";
+import { introClips, tapLetterClips, tapWordClips, tapColorClips, tapThingClips, tapShapeClips, levelClipKeys } from "../audio/sequences.js";
 import { sfxCorrect, sfxGentle, sfxTap } from "../services/sfx.js";
-import Hero from "../art/Hero.jsx";
-import Bunny from "../art/Bunny.jsx";
+import NoorleenHero, { useHeroState } from "../art/NoorleenHero.jsx";
 import { WordArt } from "../art/Words.jsx";
 import { ColorThing } from "../art/Items.jsx";
 import { ShapeArt } from "../art/Shapes.jsx";
@@ -22,7 +22,6 @@ import {
   ModelCard,
   QtyGroup,
   CountGroup,
-  AssistBar,
   speakAndWait,
   sleep,
   useMounted,
@@ -59,7 +58,7 @@ function useCounter(value) {
     ref.current = [...ref.current, i];
     setCounted(ref.current);
     sfxTap();
-    speak(NUMBER_BY_VALUE[ref.current.length].nameSpoken);
+    playClips([numKey(ref.current.length)]);
   }, []);
   const auto = useCallback(async () => {
     const id = ++run.current;
@@ -70,7 +69,7 @@ function useCounter(value) {
       setLit(i);
       ref.current = [...ref.current, i];
       setCounted(ref.current);
-      await speakAndWait(speak(NUMBER_BY_VALUE[i + 1].nameSpoken), 650);
+      await speakAndWait(playClips([numKey(i + 1)]), 650);
     }
     if (id !== run.current || !mounted.current) return false;
     setLit(-1);
@@ -91,25 +90,18 @@ function IntroCard({ item, index, total, onNext, onExit }) {
 
   const play = useCallback(async () => {
     const id = ++run.current;
-    await ensureVoices();
-    if (id !== run.current || !mounted.current) return;
-    if (item.kind === "letter") {
-      const l = LETTER_BY_CHAR[item.ref];
-      const approved = !!game.settings.approvedSounds[item.ref];
-      await speakSequence([`ده حرف ${l.nameDefSpoken}`, approved ? l.letterSound : null, `زي ${l.wordSpoken}`]);
-    } else if (item.kind === "number") {
+    if (item.kind === "number") {
       const n = NUMBER_BY_VALUE[item.ref];
-      await speakAndWait(speak(`رقم ${n.nameSpoken}`), 500);
+      await speakAndWait(playClips(introClips(item), { instruction: true }), 500);
       if (id !== run.current || !mounted.current) return;
       const ok = await counter.auto();
-      if (ok && id === run.current && mounted.current) await speak(qtyText(n.value, ITEM_BY_ID[item.item]).spoken);
-    } else if (item.kind === "color") {
-      const c = COLOR_BY_ID[item.ref];
-      await speakSequence([`ده اللون ${c.defSpoken}`, `زي ${c.thingSpoken}`]);
-    } else if (item.kind === "shape") {
-      await speak(`ده ${SHAPE_BY_ID[item.ref].defSpoken}`);
+      // الكمية بعد العدّ (النجمة المفردة مالهاش مقطع، فبتتخطى بصمت)
+      const qty = qtyClips(n.value, item.item);
+      if (ok && id === run.current && mounted.current && qty.length) await playClips(qty);
+    } else {
+      await playClips(introClips(item), { instruction: true });
     }
-  }, [item, game.settings.approvedSounds, counter, mounted]);
+  }, [item, counter, mounted]);
 
   useEffect(() => {
     game.markIntroduced([introKey(item)]);
@@ -136,16 +128,16 @@ function IntroCard({ item, index, total, onNext, onExit }) {
     body = (
       <>
         <div className="intro-row">
-          <button type="button" className="tile big" onClick={() => speak(`حرف ${l.nameDefSpoken}`)} aria-label={`حرف ${l.name}`}>
+          <button type="button" className="tile big" onClick={() => playClips(tapLetterClips(l.char))} aria-label={`حرف ${l.name}`}>
             <span className="glyph xl">{l.char}</span>
           </button>
-          <button type="button" className="tile big" onClick={() => speak(l.wordSpoken)} aria-label={`صورة ${l.word}`}>
+          <button type="button" className="tile big" onClick={() => playClips(tapWordClips(l.char))} aria-label={`صورة ${l.word}`}>
             <WordArt art={l.art} className="tile-art" />
           </button>
         </div>
         <p className="intro-word">{l.word}</p>
         {approved && (
-          <button type="button" className="chip-btn" onClick={() => speak(l.letterSound)} aria-label="صوت الحرف">
+          <button type="button" className="chip-btn" onClick={() => speakDeviceText(l.letterSound)} aria-label="صوت الحرف">
             <IconSpeaker size={26} /> <span>صوت الحرف</span>
           </button>
         )}
@@ -156,7 +148,7 @@ function IntroCard({ item, index, total, onNext, onExit }) {
     body = (
       <>
         <div className="num-top">
-          <Hero crop="bust" expression="excited" className="hero-bust" />
+          <NoorleenHero size="q" />
           <div className="tile big numeral-tile">
             <span className="glyph xl">{n.numeral}</span>
             <span className="num-name">{n.name}</span>
@@ -170,10 +162,10 @@ function IntroCard({ item, index, total, onNext, onExit }) {
     body = (
       <>
         <div className="intro-row">
-          <button type="button" className="tile big" onClick={() => speak(`اللون ${c.defSpoken}`)} aria-label={`لون ${c.name}`}>
+          <button type="button" className="tile big" onClick={() => playClips(tapColorClips(c.id))} aria-label={`لون ${c.name}`}>
             <span className="swatch xl" style={{ background: c.hex }} />
           </button>
-          <button type="button" className="tile big" onClick={() => speak(c.thingSpoken)} aria-label={c.thingName}>
+          <button type="button" className="tile big" onClick={() => playClips(tapThingClips(c.id))} aria-label={c.thingName}>
             <ColorThing colorId={c.id} className="tile-art" />
           </button>
         </div>
@@ -184,7 +176,7 @@ function IntroCard({ item, index, total, onNext, onExit }) {
     const s = SHAPE_BY_ID[item.ref];
     body = (
       <>
-        <button type="button" className="tile huge pulse-soft" onClick={() => speak(`ده ${s.defSpoken}`)} aria-label={s.name}>
+        <button type="button" className="tile huge pulse-soft" onClick={() => playClips(tapShapeClips(s.id))} aria-label={s.name}>
           <ShapeArt shape={s.id} className="tile-art" />
         </button>
         <p className="intro-word">{s.name}</p>
@@ -197,7 +189,7 @@ function IntroCard({ item, index, total, onNext, onExit }) {
       <div className="intro-stage">
         {item.kind !== "number" && (
           <div className="mascots">
-            <Hero crop="bust" expression="excited" className="hero-bust" />
+            <NoorleenHero size="q" />
           </div>
         )}
         <div className="intro-body">{body}</div>
@@ -221,18 +213,13 @@ function PickQuestion({ q, index, total, onComplete, onExit }) {
   const [wrong, setWrong] = useState([]);
   const [hint, setHint] = useState(false);
   const [helpId, setHelpId] = useState(null);
-  const [expr, setExpr] = useState("happy");
+  const [heroState, flashHero, heroPulse] = useHeroState();
   const [done, setDone] = useState(null);
   const [praiseText, setPraiseText] = useState("");
   const counter = useCounter(q.countTarget ? q.countTarget.value : 0);
 
-  const sayPrompt = useCallback(async () => {
-    await ensureVoices();
-    return speak(q.prompt.spoken);
-  }, [q]);
-
   useEffect(() => {
-    sayPrompt();
+    playClips(q.prompt.clips, { instruction: true });
     return () => cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q.id]);
@@ -240,12 +227,12 @@ function PickQuestion({ q, index, total, onComplete, onExit }) {
   const finish = async (firstTry, help) => {
     locked.current = true;
     sfxCorrect();
-    setExpr("excited");
+    flashHero("happy"); // نفس لحظة صوت التشجيع
     setDone(help ? "help" : "correct");
     game.recordResult(q.id, q.skills, firstTry, help);
-    const line = game.praise();
-    setPraiseText(line);
-    await speakAndWait(speakSequence([line]), 1500);
+    const pr = game.praise();
+    setPraiseText(pr.text);
+    await speakAndWait(playClips([pr.key]), 1500);
     if (!mounted.current) return;
     onComplete();
   };
@@ -258,17 +245,18 @@ function PickQuestion({ q, index, total, onComplete, onExit }) {
     }
     attempts.current += 1;
     sfxGentle();
-    setExpr("thinking");
+    flashHero("encourage");
     setWrong((w) => [...w, opt.id]);
     counter.reset();
     setHint(true);
     if (attempts.current === 1) {
-      speakSequence([game.retry(), q.hint.spoken]);
+      // "ولا يهمك" ثم نعيد السؤال بنفس المقاطع (التلميح نفسه بصري)
+      playClips([game.retry().key, ...q.prompt.clips]);
     } else {
-      // بعد محاولتين: نوريها الصح وننفذه معاها
+      // بعد محاولتين: "تعالي نعملها سوا" ثم السؤال، ونوريها الصح وننفذه معاها
       locked.current = true;
       setHelpId(q.answerId);
-      await speakAndWait(speakSequence([game.retry(), helpLine()]), 900);
+      await speakAndWait(playClips([HELP_KEY, ...q.prompt.clips]), 900);
       if (!mounted.current) return;
       await sleep(500);
       if (!mounted.current) return;
@@ -281,16 +269,14 @@ function PickQuestion({ q, index, total, onComplete, onExit }) {
     <main className="screen level">
       <Header
         onExit={onExit}
-        onReplay={sayPrompt}
+        onReplay={replayInstruction}
         dots={<ProgressDots total={total} current={index} />}
       />
-      <AssistBar text={q.prompt.spoken} />
       <section className={`stage ${q.countTarget ? "countq" : ""}`}>
         <div className="mascots">
-          <Hero crop="bust" expression={expr} className={`hero-bust ${done ? "cheer" : ""}`} />
+          <NoorleenHero state={heroState} pulse={heroPulse} size="q" />
           {game.settings.bunny && (
             <div className={`bunny-wrap ${hint ? "hinting" : ""}`}>
-              <Bunny className="bunny-sm" />
               {hint && <ModelCard model={q.hint.model} />}
             </div>
           )}
@@ -344,7 +330,7 @@ function PairsQuestion({ q, index, total, onComplete, onExit }) {
   const [matched, setMatched] = useState([]);
   const [helpIds, setHelpIds] = useState(null);
   const [hint, setHint] = useState(false);
-  const [expr, setExpr] = useState("happy");
+  const [heroState, flashHero, heroPulse] = useHeroState();
   const [done, setDone] = useState(false);
   const [praiseText, setPraiseText] = useState("");
   const wrongSince = useRef(0); // أخطاء من آخر توصيلة
@@ -354,12 +340,8 @@ function PairsQuestion({ q, index, total, onComplete, onExit }) {
   const matchedRef = useRef([]);
   const byId = Object.fromEntries(q.pairs.map((p) => [p.id, p]));
 
-  const sayPrompt = useCallback(async () => {
-    await ensureVoices();
-    return speak(q.prompt.spoken);
-  }, [q]);
   useEffect(() => {
-    sayPrompt();
+    playClips(q.prompt.clips, { instruction: true });
     return () => cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q.id]);
@@ -367,12 +349,12 @@ function PairsQuestion({ q, index, total, onComplete, onExit }) {
   const finishAll = async () => {
     locked.current = true;
     sfxCorrect();
-    setExpr("excited");
+    flashHero("happy");
     setDone(true);
     game.recordResult(q.id, q.skills, wrongTotal.current === 0 && !helped.current, helped.current);
-    const line = game.praise();
-    setPraiseText(line);
-    await speakAndWait(speakSequence([line]), 1500);
+    const pr = game.praise();
+    setPraiseText(pr.text);
+    await speakAndWait(playClips([pr.key]), 1500);
     if (!mounted.current) return;
     onComplete();
   };
@@ -388,11 +370,11 @@ function PairsQuestion({ q, index, total, onComplete, onExit }) {
   const tap = async (side, id) => {
     if (locked.current || matchedRef.current.includes(id)) return;
     const p = byId[id];
-    const name = side === "key" ? p.keySpoken : p.matchSpoken;
+    const name = side === "key" ? p.keyClips : p.matchClips; // مقاطع اسم اللي اتلمس
     if (!sel || sel.side === side) {
       setSel({ side, id });
       sfxTap();
-      speak(name);
+      playClips(name);
       return;
     }
     // الاتنين اتختاروا
@@ -405,19 +387,18 @@ function PairsQuestion({ q, index, total, onComplete, onExit }) {
       if (all) {
         finishAll();
       } else {
-        setExpr("excited");
-        speakSequence([name, game.praise()]);
-        setTimeout(() => mounted.current && setExpr("happy"), 1200);
+        flashHero("happy");
+        playClips([...name, game.praise().key]);
       }
       return;
     }
     wrongTotal.current += 1;
     wrongSince.current += 1;
     sfxGentle();
-    setExpr("thinking");
+    flashHero("encourage");
     setHint(true);
     if (wrongSince.current < 2) {
-      speakSequence([name, game.retry(), q.hint.spoken]);
+      playClips([...name, game.retry().key]);
       return;
     }
     // بعد محاولتين: نوريها توصيلة ونعملها سوا
@@ -425,7 +406,7 @@ function PairsQuestion({ q, index, total, onComplete, onExit }) {
     helped.current = true;
     const nextId = q.keysOrder.find((x) => !matchedRef.current.includes(x));
     setHelpIds(nextId);
-    await speakAndWait(speakSequence([game.retry(), helpLine()]), 900);
+    await speakAndWait(playClips([HELP_KEY]), 900);
     if (!mounted.current) return;
     await sleep(700);
     if (!mounted.current) return;
@@ -435,7 +416,6 @@ function PairsQuestion({ q, index, total, onComplete, onExit }) {
       finishAll();
     } else {
       locked.current = false;
-      setExpr("happy");
     }
   };
 
@@ -462,16 +442,10 @@ function PairsQuestion({ q, index, total, onComplete, onExit }) {
 
   return (
     <main className="screen level">
-      <Header onExit={onExit} onReplay={sayPrompt} dots={<ProgressDots total={total} current={index} />} />
-      <AssistBar text={q.prompt.spoken} />
+      <Header onExit={onExit} onReplay={replayInstruction} dots={<ProgressDots total={total} current={index} />} />
       <section className="stage">
         <div className="mascots">
-          <Hero crop="bust" expression={expr} className={`hero-bust ${done ? "cheer" : ""}`} />
-          {game.settings.bunny && (
-            <div className={`bunny-wrap ${hint ? "hinting" : ""}`}>
-              <Bunny className="bunny-sm" />
-            </div>
-          )}
+          <NoorleenHero state={heroState} pulse={heroPulse} size="q" />
         </div>
         <p className="prompt-text">{q.prompt.display}</p>
         {done && <p className="praise-text">{praiseText}</p>}
@@ -493,6 +467,11 @@ export default function LevelScreen({ levelId, onExit, onDone }) {
   const [phase, setPhase] = useState(startQ > 0 || !level.learn.length ? "q" : "learn");
   const [idx, setIdx] = useState(startQ);
   const advancing = useRef(null);
+
+  // تحميل مسبق لمقاطع المرحلة الحالية بس
+  useEffect(() => {
+    preloadClips(levelClipKeys(level));
+  }, [level]);
 
   const nextCard = () => {
     if (idx + 1 < level.learn.length) setIdx(idx + 1);

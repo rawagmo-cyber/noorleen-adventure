@@ -1,9 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { loadState, saveState, defaultState } from "../services/storage.js";
 import { LEVELS } from "../data/curriculum.js";
-import { setRate, setPreferredVoice } from "../services/speech.js";
 import { setAudioSettings } from "../services/sfx.js";
-import { praiseLines, retryLine } from "../data/phrases.js";
+import { pickPraise, pickRetry } from "../audio/clips.js";
+import { clipText } from "../audio/audioService.ts";
 
 export const STICKER_COUNT = 12;
 export const unlockedStickerCount = (completedCount) =>
@@ -20,7 +20,6 @@ export function GameProvider({ children }) {
   const [recovered] = useState(initial.current.recovered);
   const stateRef = useRef(state);
   const sessionLevels = useRef(0);
-  const praiseIdx = useRef(0);
 
   // تحديث + حفظ فوري (بعد كل سؤال/مرحلة/إعداد)
   const update = useCallback((fn) => {
@@ -34,10 +33,8 @@ export function GameProvider({ children }) {
   // الإعدادات بتتطبق على الخدمات
   const s = state.settings;
   useEffect(() => {
-    setRate(s.rate);
-    setPreferredVoice(s.voiceURI);
     setAudioSettings({ music: s.music, sfx: s.sfx });
-  }, [s.rate, s.voiceURI, s.music, s.sfx]);
+  }, [s.music, s.sfx]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -103,13 +100,15 @@ export function GameProvider({ children }) {
       patchProgress: (patch) => update((st) => ({ ...st, progress: { ...st.progress, ...patch } })),
       updateSettings: (patch) => update((st) => ({ ...st, settings: { ...st.settings, ...patch } })),
       resetProgress: () => update((st) => ({ ...st, progress: defaultState().progress })),
+      // بترجّع مقطع تشجيع واحد عشوائي (من غير تكرار ورا بعض): {key, text}
       praise: () => {
-        const list = praiseLines(stateRef.current.settings.usePraiseName);
-        const line = list[praiseIdx.current % list.length];
-        praiseIdx.current += 1;
-        return line;
+        const key = pickPraise(stateRef.current.settings.usePraiseName);
+        return { key, text: clipText(key) };
       },
-      retry: () => retryLine(stateRef.current.settings.usePraiseName),
+      retry: () => {
+        const key = pickRetry();
+        return { key, text: clipText(key) };
+      },
     };
   }, [update]);
 

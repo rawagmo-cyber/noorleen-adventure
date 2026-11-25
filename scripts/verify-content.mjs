@@ -4,6 +4,9 @@ import { NUMBERS } from "../src/data/numbers.js";
 import { COLORS, SHAPES } from "../src/data/colorsShapes.js";
 import { LEVELS } from "../src/data/curriculum.js";
 import { WORD_ART_KEYS } from "./art-keys.mjs";
+import { readFileSync, existsSync } from "node:fs";
+import { letterKey, wordKey, numKey, colorKey, shapeKey, thingKey, STAGE_KEYS, COMMON_KEYS } from "../src/audio/clips.js";
+const manifest = JSON.parse(readFileSync(new URL("../src/audio/manifest.json", import.meta.url), "utf8"));
 
 let errors = 0;
 const fail = (m) => { errors++; console.error("✗", m); };
@@ -16,7 +19,7 @@ LETTERS.forEach((l, i) => {
   if (l.char !== expectedChars[i]) fail(`الحرف ${i}: ${l.char} بدل ${expectedChars[i]}`);
   if (l.word !== expectedWords[i]) fail(`كلمة ${l.char}: ${l.word} بدل ${expectedWords[i]}`);
   if (!WORD_ART_KEYS.includes(l.art)) fail(`مفيش رسمة للكلمة ${l.word} (${l.art})`);
-  if (!l.nameSpoken || !l.nameDefSpoken || !l.wordSpoken || !l.wordDefSpoken || !l.letterName || !l.letterSound) fail(`بيانات ناقصة للحرف ${l.char}`);
+  if (!l.letterName || !l.letterSound) fail(`بيانات ناقصة للحرف ${l.char}`);
   if (l.letterName === l.letterSound) fail(`اسم الحرف = صوته: ${l.char}`);
 });
 if (new Set(LETTERS.map((l) => l.art)).size !== 28) fail("رسمات مكررة بين الكلمات");
@@ -48,8 +51,9 @@ LEVELS.forEach((lv) => {
     qCount++;
     if (seenIds.has(q.id)) fail("id مكرر " + q.id);
     seenIds.add(q.id);
-    if (!q.prompt.spoken || !q.prompt.display) fail(q.id + " بدون نص");
-    if (!q.hint || !q.hint.spoken) fail(q.id + " بدون تلميح");
+    if (!q.prompt.clips || !q.prompt.clips.length || !q.prompt.display) fail(q.id + " بدون نص أو مقاطع صوت");
+    for (const k of q.prompt.clips || []) if (!(k in manifest)) fail(`${q.id}: المفتاح ${k} مش في manifest.json`);
+    for (const p of q.pairs || []) for (const k of [...p.keyClips, ...p.matchClips]) if (!(k in manifest)) fail(`${q.id}: المفتاح ${k} مش في manifest.json`);
     if (!q.skills.length) fail(q.id + " بدون مهارة");
     if (lv.stageId !== "bridge") {
       // السؤال لازم يكون عن حاجة اتعرضت قبل كده
@@ -99,5 +103,26 @@ if (sameRun > 0) fail("إجابات صحيحة في نفس المكان في أ�
 else ok("مكان الإجابة الصحيحة بيتغيّر بين الأسئلة");
 
 // ثبات الـ ids بين تشغيلين
+// ---- المقاطع الصوتية
+{
+  let bad = 0;
+  const f = (m) => { bad++; console.log("✗", m); };
+  const check = (k, text, what) => {
+    if (!(k in manifest)) return f(`${what}: المفتاح ${k} مش في manifest.json`);
+    if (!existsSync(new URL(`../public/audio/${k}.mp3`, import.meta.url))) f(`${what}: ملف ${k}.mp3 مش موجود`);
+    if (text && manifest[k] !== text) f(`${what}: ${k} = "${manifest[k]}" بس اللعبة متوقعة "${text}"`);
+  };
+  LETTERS.forEach((l) => { check(letterKey(l.char), l.name, "حرف " + l.char); check(wordKey(l.char), l.word, "كلمة " + l.char); });
+  COLORS.forEach((c) => { check(colorKey(c.id), c.name, "لون " + c.id); check(thingKey(c.id), c.thingName, "حاجة لون " + c.id); });
+  SHAPES.forEach((s) => check(shapeKey(s.id), s.name, "شكل " + s.id));
+  Object.values(STAGE_KEYS).forEach((k) => check(k));
+  COMMON_KEYS.forEach((k) => check(k));
+  for (let v = 1; v <= 10; v++) check(numKey(v));
+  // كل المفاتيح اللي في manifest لازم يكون ليها ملف
+  Object.keys(manifest).forEach((k) => check(k));
+  if (bad) { console.log(`\n${bad} مشكلة في الصوت`); process.exitCode = 1; } else console.log("✓ كل مفاتيح الصوت موجودة ولها ملفات ونصوصها مطابقة");
+}
+
 console.log(errors ? `\n${errors} مشكلة` : "\nكل الفحوصات نجحت ✔");
-process.exit(errors ? 1 : 0);
+process.exit(errors || process.exitCode ? 1 : 0);
+

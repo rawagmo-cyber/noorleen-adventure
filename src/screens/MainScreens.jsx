@@ -2,19 +2,20 @@ import React, { useEffect, useRef, useState } from "react";
 import { GAME_TITLE, HERO_NAME } from "../config.js";
 import { STAGES, LEVELS, levelsOfStage, LEVEL_BY_ID } from "../data/curriculum.js";
 import { COLOR_BY_ID, SHAPE_BY_ID } from "../data/colorsShapes.js";
-import { welcomeLine, restLine, starLine, replayLine } from "../data/phrases.js";
 import { useGame, unlockedStickerCount, STICKER_COUNT } from "../state/GameContext.jsx";
-import { speak, speakSequence, ensureVoices, cancel, prime, retryAudio } from "../services/speech.js";
-import { unlockAudio, sfxTap, sfxStar, sfxLock, sfxCorrect } from "../services/sfx.js";
-import Hero from "../art/Hero.jsx";
+import { playClips, replayInstruction, cancel, clipText } from "../audio/audioService.ts";
+import { STAR_KEY, BREAK_KEY, CONTINUE_KEY, LETS_PLAY_KEY } from "../audio/clips.js";
+import { TUTORIAL_CLIPS } from "../audio/sequences.js";
+import { sfxTap, sfxStar, sfxLock, sfxCorrect } from "../services/sfx.js";
+import NoorleenHero, { useHeroState } from "../art/NoorleenHero.jsx";
 import Bunny from "../art/Bunny.jsx";
 import { StageIcon } from "../art/StageIcons.jsx";
 import { STICKERS, StickerArt } from "../art/Stickers.jsx";
 import { WordArt } from "../art/Words.jsx";
 import { ShapeArt } from "../art/Shapes.jsx";
-import { IconPlay, IconStar, IconLock, IconSticker, IconMap, IconMoon, IconSpeaker, IconCheck, IconWarn } from "../art/Icons.jsx";
+import { IconPlay, IconStar, IconLock, IconSticker, IconMoon, IconCheck } from "../art/Icons.jsx";
 import { ColorThing } from "../art/Items.jsx";
-import { ParentGateButton, MapButton, SpeakerButton, useAudioInfo, audioBad, useMounted, speakAndWait, sleep } from "../components/ui.jsx";
+import { ParentGateButton, MapButton, SpeakerButton, useMounted, speakAndWait } from "../components/ui.jsx";
 
 // ------------------------------------------------------------------ ترحيب
 export function Welcome({ onStart, onParent }) {
@@ -22,7 +23,7 @@ export function Welcome({ onStart, onParent }) {
     <main className="screen welcome">
       <div className="top-right"><ParentGateButton onOpen={onParent} /></div>
       <div className="welcome-art">
-        <Hero expression="happy" pose="wave" withBunny={false} className="hero-welcome" />
+        <NoorleenHero size="welcome" fallbackCrop="full" />
       </div>
       <h1 className="title">{GAME_TITLE}</h1>
       <button type="button" className="btn-play" onClick={onStart} aria-label="يلا نلعب">
@@ -33,91 +34,9 @@ export function Welcome({ onStart, onParent }) {
   );
 }
 
-// ------------------------------------------------------------------ تجربة صوت (لولي الأمر)
-export function SoundCheck({ onDone, onParentVoice }) {
-  const game = useGame();
-  const info = useAudioInfo();
-  const mounted = useMounted();
-  const [played, setPlayed] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  const test = async () => {
-    setBusy(true);
-    await ensureVoices();
-    const r = await speak(welcomeLine(game.settings.usePraiseName));
-    if (mounted.current) {
-      setBusy(false);
-      setPlayed(true);
-    }
-    return r;
-  };
-  useEffect(() => {
-    ensureVoices().then(() => mounted.current && test());
-    return () => cancel();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const bad = audioBad(info.status);
-  return (
-    <main className="screen soundcheck">
-      <div className="parent-card">
-        <h1>تجربة الصوت (للأهل)</h1>
-        <p>
-          اللعبة بتتكلم بصوت الجهاز بالعربي. اسمعي الجملة دي قبل ما تسلّمي الجهاز للطفلة.
-        </p>
-        <div className={`voice-status ${bad ? "bad" : "good"}`} role="status">
-          {info.status === "checking" && "بدوّر على صوت عربي…"}
-          {info.status === "ok" && `الصوت المستخدم: ${info.voiceName} (${info.voiceLang})`}
-          {info.status === "no-arabic-voice" && "الجهاز ده مفيهوش صوت عربي."}
-          {info.status === "unsupported" && "المتصفح ده ما بيدعمش النطق الصوتي."}
-          {info.status === "failed" && "الصوت فشل. جرّبي تاني."}
-        </div>
-        <div className="dialog-actions">
-          <button type="button" className="pbtn" onClick={test} disabled={busy && !bad}>
-            <IconSpeaker size={22} /> اسمعي الجملة
-          </button>
-          {!bad && (
-            <button
-              type="button"
-              className="pbtn primary"
-              disabled={!played}
-              onClick={() => {
-                game.patchProgress({ soundChecked: true });
-                game.updateSettings({ soundConfirmed: true });
-                onDone();
-              }}
-            >
-              <IconCheck size={22} /> سمعت الصوت وهو واضح
-            </button>
-          )}
-          <button type="button" className="pbtn" onClick={onParentVoice}>
-            الصوت مش واضح؟ افتحي إعدادات الصوت
-          </button>
-          {bad && (
-            <button type="button" className="pbtn" onClick={() => retryAudio()}>
-              جرّبي تاني
-            </button>
-          )}
-          {bad && (
-            <button type="button" className="pbtn" onClick={onDone}>
-              كمّلي للخريطة (هتظهر لك تنبيهات الصوت)
-            </button>
-          )}
-        </div>
-        <p className="muted small">
-          ملاحظة: بعض أصوات الجهاز ممكن تحتاج إنترنت حسب مزوّد الصوت. وما نقدرش نضمن صوت مصري لو الجهاز مش موفره.
-        </p>
-      </div>
-    </main>
-  );
-}
-
 // ------------------------------------------------------------------ الخريطة
-const STOP_MSG = "لسه شوية، كملي اللي قبله";
-
 export function MapScreen({ onStage, onStickers, onParent, onTutorial }) {
   const game = useGame();
-  const info = useAudioInfo();
   const cur = game.currentLevel();
   const curStage = cur ? cur.stageId : "bridge";
   const doneCount = Object.keys(game.progress.completed).length;
@@ -135,16 +54,13 @@ export function MapScreen({ onStage, onStickers, onParent, onTutorial }) {
       sfxLock();
       setShake(st.id);
       setTimeout(() => setShake(null), 700);
-      speak(STOP_MSG);
       return;
     }
     busy.current = true;
     sfxTap();
-    speak(st.spoken);
-    setTimeout(() => {
-      if (st.id === "letters" && !game.progress.tutorialDone) onTutorial();
-      else onStage(st.id);
-    }, 650);
+    // اسم المحطة بيتقال أول ما الشاشة الجاية تفتح
+    if (st.id === "letters" && !game.progress.tutorialDone) onTutorial();
+    else onStage(st.id);
   };
 
   return (
@@ -154,18 +70,13 @@ export function MapScreen({ onStage, onStickers, onParent, onTutorial }) {
           <IconStar size={34} />
           <b>{stars}</b>
         </div>
-        <button type="button" className="btn-round stickers-btn" onClick={() => { sfxTap(); speak("الْمُلْصَقَات"); setTimeout(onStickers, 500); }} aria-label="الملصقات">
+        <button type="button" className="btn-round stickers-btn" onClick={() => { sfxTap(); onStickers(); }} aria-label="الملصقات">
           <IconSticker size={38} />
           <span className="mini-count">{unlockedStickerCount(doneCount)}</span>
         </button>
         <span className="grow" />
         <ParentGateButton onOpen={onParent} />
       </header>
-      {audioBad(info.status) && !game.settings.assistedMode && (
-        <div className="audio-warning" role="alert">
-          <IconWarn size={22} /> للأهل: الصوت العربي مش متاح على الجهاز ده — افتحي شاشة الأهل (ضغطة مطولة على أيقونة الشخص).
-        </div>
-      )}
       <ol className="path">
         {STAGES.map((st, i) => {
           const lv = levelsOfStage(st.id);
@@ -189,7 +100,7 @@ export function MapScreen({ onStage, onStickers, onParent, onTutorial }) {
                 )}
                 {isCur && (
                   <span className="hero-pin">
-                    <Hero facing="side" pose="stand" expression="happy" crop="bust" className="hero-mini" />
+                    <NoorleenHero size="pin" />
                   </span>
                 )}
                 {isStart && <span className="start-arrow" aria-hidden="true">▼</span>}
@@ -257,9 +168,8 @@ export function StageScreen({ stageId, onBack, onLevel }) {
   const stage = STAGES.find((s) => s.id === stageId);
   const levels = levelsOfStage(stageId);
   const cur = game.currentLevel();
-  const mounted = useMounted();
   useEffect(() => {
-    ensureVoices().then(() => mounted.current && speak(stage.spoken));
+    playClips([stage.clip], { instruction: true });
     return () => cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stageId]);
@@ -268,7 +178,6 @@ export function StageScreen({ stageId, onBack, onLevel }) {
     if (busy.current) return;
     if (!unlocked) {
       sfxLock();
-      speak(STOP_MSG);
       return;
     }
     busy.current = true;
@@ -283,7 +192,7 @@ export function StageScreen({ stageId, onBack, onLevel }) {
           <StageIcon icon={stage.icon} className="stage-title-art" />
           <h1>{stage.name}</h1>
         </div>
-        <SpeakerButton onClick={() => speak(stage.spoken)} label="اسمعي اسم المحطة" />
+        <SpeakerButton onClick={() => playClips([stage.clip], { instruction: true })} label="اسمعي اسم المحطة" />
       </header>
       <ol className="levels">
         {levels.map((lv, i) => {
@@ -320,13 +229,12 @@ export function Tutorial({ onDone, onExit }) {
   const mounted = useMounted();
   const [done, setDone] = useState(false);
   const [nudge, setNudge] = useState(0);
+  const [heroState, flashHero, heroPulse] = useHeroState();
   const locked = useRef(false);
-  const say = async () => {
-    await ensureVoices();
-    return speak("دُوسِي عَلَى الأَسَد");
-  };
+  const say = () => playClips(TUTORIAL_CLIPS, { instruction: true });
   useEffect(() => {
-    say();
+    // أول مرة: اسم المحطة ثم التعليمات
+    playClips([STAGES[0].clip, ...TUTORIAL_CLIPS], { instruction: true });
     return () => cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -335,7 +243,8 @@ export function Tutorial({ onDone, onExit }) {
     locked.current = true;
     setDone(true);
     sfxCorrect();
-    await speakAndWait(speakSequence([game.praise(), "كده فهمنا. يلا نلعب"]), 1500);
+    flashHero("happy");
+    await speakAndWait(playClips([game.praise().key, LETS_PLAY_KEY]), 1500);
     if (!mounted.current) return;
     game.patchProgress({ tutorialDone: true });
     onDone();
@@ -344,19 +253,19 @@ export function Tutorial({ onDone, onExit }) {
     if (locked.current) return;
     setNudge((n) => n + 1);
     sfxTap();
-    speak("دُوسِي عَلَى الأَسَد");
+    flashHero("encourage");
+    say();
   };
   return (
     <main className="screen level">
       <header className="lvl-header">
         <MapButton onGo={onExit} />
         <span className="dots-spacer" />
-        <SpeakerButton onClick={say} />
+        <SpeakerButton onClick={replayInstruction} />
       </header>
       <section className="stage">
         <div className="mascots">
-          <Hero crop="bust" expression={done ? "excited" : "happy"} className="hero-bust" />
-          <div className="bunny-wrap"><Bunny className="bunny-sm" /></div>
+          <NoorleenHero state={heroState} pulse={heroPulse} size="q" />
         </div>
         <p className="prompt-text">دوسي على الأسد</p>
       </section>
@@ -378,20 +287,24 @@ export function Celebration({ levelId, result, onMap, onRest }) {
   const game = useGame();
   const mounted = useMounted();
   const level = LEVEL_BY_ID[levelId];
-  const useName = game.settings.usePraiseName;
+  const [pr] = useState(() => game.praise());
+  const starText = clipText(STAR_KEY);
   const sticker = result.newStickerIndex != null ? STICKERS[result.newStickerIndex] : null;
   const suggestRest = result.sessionCount > 0 && result.sessionCount % 2 === 0;
   const [showSticker, setShowSticker] = useState(false);
+  const [heroState, flashHero, heroPulse] = useHeroState();
 
   useEffect(() => {
     let alive = true;
+    flashHero("happy"); // فرحانة حوالي ٢ ثانية ثم idle
     if (result.newStar) sfxStar();
     else sfxCorrect();
-    const items = [game.praise(), result.newStar ? starLine(useName) : replayLine(useName)];
-    if (sticker) items.push(`ملصق جديد: ${sticker.spoken}`);
-    if (suggestRest) items.push(restLine(useName));
+    // مقطع تشجيع واحد بس (ما بنخلطش مقطعين تشجيع)، ثم النجمة الجديدة، ثم الاستراحة لو مقترحة
+    const items = [pr.key];
+    if (result.newStar) items.push(STAR_KEY);
+    if (suggestRest) items.push(BREAK_KEY);
     const t = setTimeout(() => alive && sticker && setShowSticker(true), 1800);
-    ensureVoices().then(() => alive && speakSequence(items, undefined));
+    playClips(items);
     return () => {
       alive = false;
       clearTimeout(t);
@@ -408,14 +321,14 @@ export function Celebration({ levelId, result, onMap, onRest }) {
         ))}
       </div>
       <div className="celebrate-art">
-        <Hero expression="laughing" pose="celebrate" className="hero-celebrate" />
+        <NoorleenHero state={heroState} pulse={heroPulse} size="celebrate" fallbackCrop="full" />
         <div className="big-star" aria-label={result.newStar ? "نجمة جديدة" : "نجمة"}>
           <IconStar size={120} />
         </div>
       </div>
-      <p className="praise-text big">{result.newStar ? starLine(useName) : replayLine(useName)}</p>
+      <p className="praise-text big">{result.newStar ? starText : pr.text}</p>
       {showSticker && sticker && (
-        <button type="button" className="sticker-pop" onClick={() => speak(sticker.spoken)} aria-label={`ملصق ${sticker.name}`}>
+        <button type="button" className="sticker-pop" onClick={sfxTap} aria-label={`ملصق ${sticker.name}`}>
           <StickerArt index={result.newStickerIndex} className="sticker-art" />
           <span>{sticker.name}</span>
         </button>
@@ -442,7 +355,7 @@ export function Rest({ onWake }) {
       <div className="stars-bg" aria-hidden="true" />
       <Bunny mood="sleepy" className="bunny-rest" />
       <p className="rest-text">استراحة صغيرة</p>
-      <button type="button" className="btn-big go" onClick={() => { sfxTap(); onWake(); }} aria-label="نكمّل">
+      <button type="button" className="btn-big go" onClick={() => { sfxTap(); onWake(); playClips([CONTINUE_KEY]); }} aria-label="نكمّل">
         <IconPlay size={48} />
       </button>
     </main>
@@ -469,7 +382,7 @@ export function StickersScreen({ onBack }) {
               <button
                 type="button"
                 className={`sticker-slot ${open ? "open" : "locked"}`}
-                onClick={() => (open ? (sfxTap(), speak(s.spoken)) : (sfxLock(), speak("لسه ما فتحناهوش، كملي اللعب")))}
+                onClick={() => (open ? sfxTap() : sfxLock())}
                 aria-label={open ? `ملصق ${s.name}` : "ملصق لسه مقفول"}
               >
                 {open ? <StickerArt index={i} className="sticker-art" /> : <IconLock size={36} />}

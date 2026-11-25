@@ -13,20 +13,16 @@ export const defaultState = () => ({
     introduced: {}, // "letter:ب" -> true
     resume: null, // {levelId, qIndex}
     tutorialDone: false,
-    soundChecked: false,
+    welcomed: false, // الترحيب "أهلًا" بيتقال أول مرة بس
   },
   settings: {
     music: true,
     sfx: true,
     reduceMotion: "auto", // auto | on | off
-    rate: 0.8,
-    voiceURI: null,
     bunny: true,
     usePraiseName: true,
-    assistedMode: false,
     unlockAll: false,
     approvedSounds: {}, // "ب" -> true بعد ما ولي الأمر يراجع صوت الحرف
-    soundConfirmed: false,
   },
 });
 

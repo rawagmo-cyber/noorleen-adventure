@@ -3,13 +3,14 @@ import { GAME_TITLE, HERO_NAME, PRAISE_NAME } from "../config.js";
 import { STAGES, LEVELS, levelsOfStage, ALL_SKILLS } from "../data/curriculum.js";
 import { LETTERS } from "../data/letters.js";
 import { useGame, unlockedStickerCount, STICKER_COUNT } from "../state/GameContext.jsx";
-import { speak, cancel, setPreferredVoice, retryAudio, ensureVoices } from "../services/speech.js";
-import { useAudioInfo, audioBad, ConfirmDialog } from "../components/ui.jsx";
+import { playClips, speakDeviceText, cancel } from "../audio/audioService.ts";
+import { letterKey, wordKey } from "../audio/clips.js";
+import { ConfirmDialog } from "../components/ui.jsx";
 import { IconSpeaker, IconCheck } from "../art/Icons.jsx";
 
 const TABS = [
   ["progress", "التقدّم"],
-  ["voice", "الصوت"],
+  ["voice", "أصوات الحروف"],
   ["settings", "الإعدادات"],
   ["data", "البيانات والخصوصية"],
 ];
@@ -105,93 +106,25 @@ function Progress({ onPlayLevel }) {
 
 function Voice() {
   const game = useGame();
-  const info = useAudioInfo();
   const s = game.settings;
-  const bad = audioBad(info.status);
-  const test = async (text) => {
-    await ensureVoices();
-    speak(text);
-  };
   return (
     <div>
-      <div className={`voice-status ${bad ? "bad" : "good"}`} role="status">
-        {info.status === "ok" && `الصوت العربي شغال: ${info.voiceName} (${info.voiceLang})`}
-        {info.status === "checking" && "بدوّر على صوت عربي…"}
-        {info.status === "no-arabic-voice" && "مفيش صوت عربي على الجهاز ده. جرّبي متصفح أو جهاز فيه صوت عربي."}
-        {info.status === "unsupported" && "المتصفح ده ما بيدعمش النطق الصوتي."}
-        {info.status === "failed" && "الصوت فشل أكتر من مرة."}
-      </div>
-      {bad && (
-        <button type="button" className="pbtn" onClick={() => retryAudio()}>
-          جرّبي الصوت تاني
-        </button>
-      )}
-      {info.arabicVoices.length > 1 && (
-        <label className="field">
-          اختاري الصوت:
-          <select
-            value={s.voiceURI || ""}
-            onChange={(e) => {
-              game.updateSettings({ voiceURI: e.target.value || null });
-              setPreferredVoice(e.target.value || null);
-            }}
-          >
-            <option value="">تلقائي (الأفضل ar-EG)</option>
-            {info.arabicVoices.map((v) => (
-              <option key={v.uri} value={v.uri}>
-                {v.name} — {v.lang}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      <fieldset className="field">
-        <legend>سرعة الكلام</legend>
-        {[[0.65, "بطيئة جدًا"], [0.8, "هادية"], [0.95, "عادية"]].map(([v, l]) => (
-          <label key={v} className="radio">
-            <input type="radio" name="rate" checked={s.rate === v} onChange={() => game.updateSettings({ rate: v })} /> {l}
-          </label>
-        ))}
-      </fieldset>
-
-      <h3>جرّبي قبل ما تسلّمي الجهاز للطفلة</h3>
-      <div className="test-row">
-        {[
-          ["تعليمات", "دُوسِي عَلَى الأَسَد"],
-          ["تشجيع", `برافو يا ${PRAISE_NAME}!`],
-          ["رقم", "ثَلَاثَة"],
-          ["لون", "الأَحْمَر"],
-          ["شكل", "الدَّائِرَة"],
-          ["كلمة", "بَطَّة"],
-        ].map(([l, t]) => (
-          <button key={l} type="button" className="pbtn small" onClick={() => test(t)}>
-            <IconSpeaker size={18} /> {l}
-          </button>
-        ))}
-      </div>
-      <button
-        type="button"
-        className={`pbtn ${s.soundConfirmed ? "" : "primary"}`}
-        onClick={() => game.updateSettings({ soundConfirmed: true })}
-      >
-        <IconCheck size={20} /> الصوت واضح {s.soundConfirmed ? "(اتأكد)" : ""}
-      </button>
-
-      <h3>أصوات الحروف (مراجعة حرف حرف)</h3>
       <p className="muted small">
-        نطق حرف منفرد بالـ TTS ممكن يطلع اسم الحرف أو صوت غير مقصود حسب المحرك، فاللعبة ما بتعتبرش صوت الحرف درس نطق إلا لما إنتِ تسمعيه وتعتمديه هنا. لو مش معتمد: بتتقدم الحرف باسمه وكلمته بس.
+        اسم الحرف والكلمة بيتنطقوا من تسجيلات جاهزة. أما صوت الحرف المنفرد فمفيش له تسجيل، وبينطقه صوت الجهاز العربي لو موجود،
+        ونطق حرف منفرد بصوت الجهاز ممكن يطلع اسم الحرف أو صوت غير مقصود. فاللعبة ما بتعلّمش صوت الحرف إلا لما إنتِ تسمعيه وتعتمديه هنا.
+        لو مش معتمد: بتتقدم الحرف باسمه وكلمته بس.
       </p>
       <div className="letter-table" role="table" aria-label="مراجعة أصوات الحروف">
         {LETTERS.map((l) => (
           <div key={l.id} className="letter-row" role="row">
             <span className="glyph sm" role="cell">{l.char}</span>
-            <button type="button" className="pbtn small" onClick={() => test(l.nameSpoken)} aria-label={`اسم الحرف ${l.name}`}>
+            <button type="button" className="pbtn small" onClick={() => playClips([letterKey(l.char)])} aria-label={`اسم الحرف ${l.name}`}>
               اسم: {l.name}
             </button>
-            <button type="button" className="pbtn small" onClick={() => test(l.letterSound)} aria-label={`صوت الحرف ${l.name}`}>
+            <button type="button" className="pbtn small" onClick={() => speakDeviceText(l.letterSound)} aria-label={`صوت الحرف ${l.name}`}>
               صوت
             </button>
-            <button type="button" className="pbtn small" onClick={() => test(l.wordSpoken)} aria-label={`كلمة ${l.word}`}>
+            <button type="button" className="pbtn small" onClick={() => playClips([wordKey(l.char)])} aria-label={`كلمة ${l.word}`}>
               {l.word}
             </button>
             <label className="toggle inline">
@@ -205,14 +138,6 @@ function Voice() {
           </div>
         ))}
       </div>
-
-      <h3>وضع المساعدة</h3>
-      <Toggle
-        label="وضع المساعدة (أنا هقرأ التعليمات)"
-        checked={s.assistedMode}
-        onChange={(v) => game.updateSettings({ assistedMode: v })}
-        note="بيظهر نص التعليمات في كل سؤال، ومفيد لو الجهاز مفيهوش صوت عربي. النص مش بديل مناسب لطفلة ما بتقراش."
-      />
     </div>
   );
 }
@@ -254,7 +179,7 @@ function Data({ onAfterReset }) {
         <li>كل البيانات محفوظة على الجهاز ده بس (localStorage). مفيش حساب ولا سيرفر ولا تتبع ولا إعلانات ولا مشتريات ولا روابط خارجية.</li>
         <li>اللعبة ما بتطلبش اسم كامل ولا صورة حقيقية ولا ميكروفون ولا كاميرا ولا موقع.</li>
         <li>التقدم مش بيتزامن بين الأجهزة، وممكن يضيع لو بيانات المتصفح اتمسحت.</li>
-        <li>بعض أصوات الجهاز ممكن تحتاج إنترنت حسب مزوّد الصوت، فمش بنوعد بأوفلاين كامل.</li>
+        <li>كلام اللعبة من ملفات صوت جاهزة جوه اللعبة نفسها. صوت الحرف المنفرد (لو اعتمدتيه) بيعتمد على صوت الجهاز وممكن يحتاج إنترنت.</li>
       </ul>
       <div className={`voice-status ${game.storageOk ? "good" : "bad"}`} role="status">
         {game.storageOk ? "الحفظ شغال على الجهاز." : "الحفظ مش متاح دلوقتي — التقدم مؤقت وهيضيع لما تقفلي الصفحة."}

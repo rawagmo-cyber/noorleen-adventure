@@ -382,7 +382,7 @@ h3 {
 }
 .hero-pin {
   position: absolute;
-  bottom: -34px;
+  bottom: -62px; /* واقفة تحت أيقونة المحطة من غير ما تغطيها */
   left: 50%;
   transform: translateX(-50%);
   pointer-events: none;
@@ -952,23 +952,23 @@ h3 {
 }
 .celebrate-art {
   position: relative;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 .hero-celebrate {
   height: clamp(170px, 32dvh, 300px);
   width: auto;
 }
 .big-star {
-  position: absolute;
-  top: -6px;
-  inset-inline-start: -40px;
+  order: -1; /* النجمة فوق الصورة، مش على وشها */
+  margin-bottom: -4px;
   color: var(--gold);
   filter: drop-shadow(0 4px 0 #b8821a);
   animation: starIn 0.8s ease both;
 }
 .big-star svg {
-  width: clamp(70px, 14dvh, 120px);
+  width: clamp(56px, 10dvh, 96px);
   height: auto;
 }
 .sticker-pop {
@@ -1604,8 +1604,8 @@ h3 {
     text-align: center;
   }
   .hero-pin {
-    bottom: 8px;
-    left: -26px;
+    bottom: 4px;
+    left: -40px;
     transform: none;
   }
   .celebrate {
@@ -1629,4 +1629,60 @@ h3 {
   .stop-name {
     font-size: 18px;
   }
+}
+
+/* ============ صورة نورلين (NoorleenHero) ============ */
+.nh {
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  flex: none;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.nh-q { --nh-h: clamp(92px, 24dvh, 360px); }
+.nh-welcome { --nh-h: clamp(160px, 28dvh, 360px); }
+.nh-celebrate { --nh-h: clamp(150px, 28dvh, 360px); }
+.nh-pin { --nh-h: 76px; }
+.countq .nh-q { --nh-h: clamp(70px, 16dvh, 160px); }
+.nh-img,
+.nh-svg {
+  height: var(--nh-h);
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 4px 5px rgba(120, 80, 20, 0.18));
+}
+.nh-s-idle .nh-img,
+.nh-s-idle .nh-svg { animation: nhBreathe 4s ease-in-out infinite alternate; }
+.nh-s-happy .nh-img,
+.nh-s-happy .nh-svg { animation: nhHop 1.4s ease-in-out 1; }
+.nh-s-encourage .nh-img,
+.nh-s-encourage .nh-svg { animation: nhTilt 1.2s ease-in-out 1; }
+@keyframes nhBreathe { from { transform: scale(1); } to { transform: scale(1.03); } }
+@keyframes nhHop {
+  0%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-14px); }
+  50% { transform: translateY(0); }
+  75% { transform: translateY(-9px); }
+}
+@keyframes nhTilt {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-3deg); }
+  60% { transform: rotate(2.5deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nh-img, .nh-svg { animation: none !important; }
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+  .nh-q { --nh-h: clamp(72px, 26dvh, 140px); }
+  .nh-welcome { --nh-h: clamp(120px, 52dvh, 220px); }
+  .nh-celebrate { --nh-h: clamp(110px, 48dvh, 200px); }
+  .nh-pin { --nh-h: 64px; }
+  .countq .nh-q { --nh-h: clamp(56px, 18dvh, 90px); }
 }

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { getInfo, subscribe, speak, cancel } from "../services/speech.js";
+import { cancel } from "../audio/audioService.ts";
 import { sfxTap } from "../services/sfx.js";
 import { IconSpeaker, IconMap, IconStar, IconParent, IconWarn } from "../art/Icons.jsx";
 import { WordArt } from "../art/Words.jsx";
@@ -11,14 +11,6 @@ import { NUMBER_BY_VALUE, ITEM_BY_ID } from "../data/numbers.js";
 import { useGame } from "../state/GameContext.jsx";
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// حالة الصوت (متابعة حية)
-export function useAudioInfo() {
-  const [info, setInfo] = useState(getInfo());
-  useEffect(() => subscribe(setInfo), []);
-  return info;
-}
-export const audioBad = (status) => status === "unsupported" || status === "no-arabic-voice" || status === "failed";
 
 // زر سماعة (ثابت المكان) — بيعيد التعليمات، ومش بيتقفل حتى لو الصوت فشل
 export function SpeakerButton({ onClick, label = "اسمعي التعليمات تاني", className = "" }) {
@@ -36,8 +28,7 @@ export function MapButton({ onGo, label = "الخريطة", className = "" }) {
     if (busy.current) return;
     busy.current = true;
     sfxTap();
-    speak("الْخَرِيطَة");
-    setTimeout(onGo, 550);
+    onGo();
   };
   return (
     <button type="button" className={`btn-round map-btn ${className}`} onClick={go} aria-label={label}>
@@ -277,64 +268,7 @@ export function ModelCard({ model }) {
   }
 }
 
-// ---------- شاشة تنبيه الأهل لما الصوت مش متاح ----------
-export function AudioBlocked({ info, onBack, onRetry, onAssist }) {
-  const [ask, setAsk] = useState(false);
-  const why =
-    info.status === "unsupported"
-      ? "المتصفح ده ما بيدعمش النطق الصوتي."
-      : info.status === "no-arabic-voice"
-      ? "الجهاز ده مفيهوش صوت عربي."
-      : "الصوت وقف أو فشل أكتر من مرة.";
-  return (
-    <main className="screen blocked" aria-live="polite">
-      <div className="parent-card">
-        <IconWarn size={64} className="warn-ico" />
-        <h1>للأهل: اللعب بالصوت مش متاح دلوقتي</h1>
-        <p>{why} اللعبة معمولة لطفلة ما بتقراش، فاللعب المستقل محتاج صوت عربي.</p>
-        <p>جرّبي متصفح أو جهاز فيه صوت عربي (مثلًا Chrome على أندرويد، أو Safari على آيفون/آيباد بعد تنزيل صوت عربي من إعدادات الجهاز).</p>
-        <div className="dialog-actions">
-          <button type="button" className="pbtn primary" onClick={onRetry}>
-            جرّبي الصوت تاني
-          </button>
-          <button type="button" className="pbtn" onClick={() => setAsk(true)}>
-            وضع المساعدة: أنا هقرأ التعليمات
-          </button>
-          <button type="button" className="pbtn" onClick={onBack}>
-            رجوع للخريطة
-          </button>
-        </div>
-        <p className="muted small">وضع المساعدة بيظهر نص التعليمات ليكِ علشان تقريه للطفلة. النص مش بديل مناسب لطفلة ما بتقراش.</p>
-      </div>
-      {ask && (
-        <ConfirmDialog
-          title="تفعيل وضع المساعدة؟"
-          text="هتشوفي التعليمات مكتوبة في كل سؤال وتقريها بصوتك للطفلة. تقدري تقفليه من شاشة الأهل."
-          yes="أيوه، فعّليه"
-          no="لا"
-          onYes={() => {
-            setAsk(false);
-            onAssist();
-          }}
-          onNo={() => setAsk(false)}
-        />
-      )}
-    </main>
-  );
-}
-
-// شريط نص التعليمات في وضع المساعدة فقط
-export function AssistBar({ text }) {
-  const { settings } = useGame();
-  if (!settings.assistedMode) return null;
-  return (
-    <div className="assist-bar" role="note">
-      <b>اقرئي للطفلة:</b> {text}
-    </div>
-  );
-}
-
-// تنفيذ كلام ثم انتظار حد أدنى (علشان الشاشة ما تفوتش لو الصوت مش شغال في وضع المساعدة)
+// تنفيذ كلام ثم انتظار حد أدنى (علشان الشاشة ما تفوتش لو المقطع اتخطى أو الصوت لسه مفتحش)
 export async function speakAndWait(speakPromise, minMs = 900) {
   const t0 = Date.now();
   const res = await speakPromise;

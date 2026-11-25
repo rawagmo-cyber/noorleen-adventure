@@ -5,13 +5,14 @@ import { LETTERS, LETTER_BY_CHAR, LETTER_GROUPS } from "./letters.js";
 import { NUMBERS, NUMBER_BY_VALUE, COUNT_ITEMS, qtyText } from "./numbers.js";
 import { COLORS, COLOR_BY_ID, SHAPES, SHAPE_BY_ID } from "./colorsShapes.js";
 import { makeRng, shuffle } from "./rng.js";
+import { QT, STAGE_KEYS, MATCH_INSTRUCTION, letterKey, wordKey, numKey, colorKey, shapeKey, thingKey, qtyClips } from "../audio/clips.js";
 
 export const STAGES = [
-  { id: "letters", name: "حديقة الحروف", spoken: "حَدِيقَة الْحُرُوف", icon: "garden" },
-  { id: "numbers", name: "جزيرة الأعداد", spoken: "جَزِيرَة الْأَعْدَاد", icon: "island" },
-  { id: "colors", name: "بستان الألوان", spoken: "بُسْتَان الْأَلْوَان", icon: "orchard" },
-  { id: "shapes", name: "مدينة الأشكال", spoken: "مَدِينَة الْأَشْكَال", icon: "city" },
-  { id: "bridge", name: "جسر المطابقة", spoken: "جِسْر الْمُطَابَقَة", icon: "bridge" },
+  { id: "letters", name: "حديقة الحروف", clip: STAGE_KEYS.letters, icon: "garden" },
+  { id: "numbers", name: "جزيرة الأعداد", clip: STAGE_KEYS.numbers, icon: "island" },
+  { id: "colors", name: "بستان الألوان", clip: STAGE_KEYS.colors, icon: "orchard" },
+  { id: "shapes", name: "مدينة الأشكال", clip: STAGE_KEYS.shapes, icon: "city" },
+  { id: "bridge", name: "جسر المطابقة", clip: STAGE_KEYS.bridge, icon: "bridge" },
 ];
 
 // ---------- أدوات مساعدة ----------
@@ -37,10 +38,10 @@ function pickN(cands, n, rng) {
 
 // ---------- المحطة ١: الحروف ----------
 function letterOption(ch) {
-  return { id: `L:${ch}`, kind: "letter", ref: ch, spoken: LETTER_BY_CHAR[ch].nameDefSpoken };
+  return { id: `L:${ch}`, kind: "letter", ref: ch };
 }
 function wordOption(ch) {
-  return { id: `W:${ch}`, kind: "word", ref: ch, spoken: LETTER_BY_CHAR[ch].wordDefSpoken };
+  return { id: `W:${ch}`, kind: "word", ref: ch };
 }
 
 function lettersLevel(gi) {
@@ -82,11 +83,9 @@ function lettersLevel(gi) {
       type: "pick",
       skills: [`letter:${ch}`],
       prompt: isFind
-        ? { display: `فين حرف ${l.nameDef}؟`, spoken: `فين حرف ${l.nameDefSpoken}؟` }
-        : { display: `فين ${l.wordDef}؟`, spoken: `فين ${l.wordDefSpoken}؟` },
-      hint: isFind
-        ? { spoken: `ده حرف ${l.nameDefSpoken}، زي ${l.wordSpoken}`, model: { kind: "letterWord", ref: ch } }
-        : { spoken: `دوري على ${l.wordDefSpoken}`, model: { kind: "wordOnly", ref: ch } },
+        ? { display: `فين حرف ${l.nameDef}؟`, clips: [QT.whereLetter, letterKey(ch)] }
+        : { display: `فين ${l.wordDef}؟`, clips: [QT.lookFor, wordKey(ch)] },
+      hint: isFind ? { model: { kind: "letterWord", ref: ch } } : { model: { kind: "wordOnly", ref: ch } },
       layout: "grid",
       options: opts,
       answerId: isFind ? `L:${ch}` : `W:${ch}`,
@@ -106,10 +105,10 @@ function lettersLevel(gi) {
 const NUM_GROUPS = [[1, 2, 3], [4, 5], [6, 7, 8], [9, 10]];
 
 function numericOption(v) {
-  return { id: `N:${v}`, kind: "numeral", ref: v, spoken: NUMBER_BY_VALUE[v].nameSpoken };
+  return { id: `N:${v}`, kind: "numeral", ref: v };
 }
 function qtyOption(v, itemId) {
-  return { id: `Q:${v}`, kind: "qty", ref: v, item: itemId, spoken: qtyText(v, COUNT_ITEMS.find((x) => x.id === itemId)).spoken };
+  return { id: `Q:${v}`, kind: "qty", ref: v, item: itemId };
 }
 
 function numbersLevel(gi) {
@@ -132,21 +131,22 @@ function numbersLevel(gi) {
     const num = NUMBER_BY_VALUE[v];
     const q = { id: `${id}:q${i + 1}`, levelId: id, type: "pick", skills: [`number:${v}`], answerId: null };
     if (type === "numeral") {
-      q.prompt = { display: `فين الرقم ${num.numeral}؟`, spoken: `فين رقم ${num.nameSpoken}؟` };
-      q.hint = { spoken: `ده رقم ${num.nameSpoken}`, model: { kind: "numberItems", ref: v, item: item.id } };
+      q.prompt = { display: `فين الرقم ${num.numeral}؟`, clips: [QT.whereNum, numKey(v)] };
+      q.hint = { model: { kind: "numberItems", ref: v, item: item.id } };
       q.options = place(numericOption(v), chosen.map(numericOption));
       q.answerId = `N:${v}`;
       q.layout = "grid";
     } else if (type === "qty") {
       const t = qtyText(v, item);
-      q.prompt = { display: `فين ${t.display}؟`, spoken: `فين ${t.spoken}؟` };
-      q.hint = { spoken: `عدّي معايا: ${countSpoken(v)}`, model: { kind: "countHint", ref: v, item: item.id } };
+      // مفيش قالب "فين" للكميات، فبنستخدم "دوري على" + الكمية (مثلًا: دوري على تلاتة تفاحات)
+      q.prompt = { display: `فين ${t.display}؟`, clips: [QT.lookFor, ...qtyClips(v, item.id)] };
+      q.hint = { model: { kind: "countHint", ref: v, item: item.id } };
       q.options = place(qtyOption(v, item.id), chosen.map((c) => qtyOption(c, item.id)));
       q.answerId = `Q:${v}`;
       q.layout = "stack";
     } else {
-      q.prompt = { display: `عدّي معايا. كام ${item.one}؟`, spoken: `عُدِّي مَعَايَا. كَام ${item.oneS}؟` };
-      q.hint = { spoken: `عدّي معايا: ${countSpoken(v)}`, model: { kind: "countHint", ref: v, item: item.id } };
+      q.prompt = { display: `عدّي معايا. كام ${item.one}؟`, clips: [QT.countWithMe] };
+      q.hint = { model: { kind: "countHint", ref: v, item: item.id } };
       q.options = place(numericOption(v), chosen.map(numericOption));
       q.answerId = `N:${v}`;
       q.layout = "grid";
@@ -163,14 +163,11 @@ function numbersLevel(gi) {
     questions,
   };
 }
-export function countSpoken(v) {
-  return NUMBERS.slice(0, v).map((x) => x.nameSpoken).join("، ");
-}
 
 // ---------- المحطة ٣: الألوان ----------
 const COLOR_GROUPS = [["red", "blue"], ["yellow"], ["green", "orange"], ["purple"]];
-const swatchOption = (c) => ({ id: `S:${c}`, kind: "swatch", ref: c, spoken: COLOR_BY_ID[c].defSpoken });
-const thingOption = (c) => ({ id: `T:${c}`, kind: "thing", ref: c, spoken: COLOR_BY_ID[c].thingSpoken });
+const swatchOption = (c) => ({ id: `S:${c}`, kind: "swatch", ref: c });
+const thingOption = (c) => ({ id: `T:${c}`, kind: "thing", ref: c });
 
 function colorsLevel(gi) {
   const group = COLOR_GROUPS[gi];
@@ -194,13 +191,13 @@ function colorsLevel(gi) {
     const chosen = pickN(learned.filter((x) => x !== c), k, rng);
     const q = { id: `${id}:q${i + 1}`, levelId: id, type: "pick", skills: [`color:${c}`], layout: "grid" };
     if (type === "swatch") {
-      q.prompt = { display: `فين اللون ${"ال" + col.name}؟`, spoken: `فين اللون ${col.defSpoken}؟` };
-      q.hint = { spoken: `ده اللون ${col.defSpoken}`, model: { kind: "colorThing", ref: c } };
+      q.prompt = { display: `فين اللون ${"ال" + col.name}؟`, clips: [QT.whereColor, colorKey(c)] };
+      q.hint = { model: { kind: "colorThing", ref: c } };
       q.options = place(swatchOption(c), chosen.map(swatchOption));
       q.answerId = `S:${c}`;
     } else {
-      q.prompt = { display: `فين حاجة لونها ${col.name}؟`, spoken: `فين حاجة لَوْنها ${col.spoken}؟` };
-      q.hint = { spoken: `ده اللون ${col.defSpoken}`, model: { kind: "swatchOnly", ref: c } };
+      q.prompt = { display: `فين حاجة لونها ${col.name}؟`, clips: [QT.whereThingColor, colorKey(c)] };
+      q.hint = { model: { kind: "swatchOnly", ref: c } };
       q.options = place(thingOption(c), chosen.map(thingOption));
       q.answerId = `T:${c}`;
     }
@@ -218,7 +215,7 @@ function colorsLevel(gi) {
 
 // ---------- المحطة ٤: الأشكال ----------
 const SHAPE_GROUPS = [["circle"], ["square"], ["triangle"], ["rectangle"]];
-const shapeOption = (s) => ({ id: `H:${s}`, kind: "shape", ref: s, spoken: SHAPE_BY_ID[s].defSpoken });
+const shapeOption = (s) => ({ id: `H:${s}`, kind: "shape", ref: s });
 
 function shapesLevel(gi) {
   const s = SHAPE_GROUPS[gi][0];
@@ -240,11 +237,11 @@ function shapesLevel(gi) {
     q.options = place(shapeOption(t), chosen.map(shapeOption));
     q.answerId = `H:${t}`;
     if (type === "find") {
-      q.prompt = { display: `فين ${sh.defSpoken.replace(/[ً-ْ]/g, "")}؟`, spoken: `فين ${sh.defSpoken}؟` };
-      q.hint = { spoken: `ده ${sh.defSpoken}`, model: { kind: "shapeCard", ref: t } };
+      q.prompt = { display: `فين ${sh.defSpoken.replace(/[ً-ْ]/g, "")}؟`, clips: [QT.whereShape, shapeKey(t)] };
+      q.hint = { model: { kind: "shapeCard", ref: t } };
     } else {
-      q.prompt = { display: "فين شكل زي ده؟", spoken: "فين شَكْل زَيّ ده؟" };
-      q.hint = { spoken: `ده ${sh.defSpoken}`, model: { kind: "shapeCard", ref: t } };
+      q.prompt = { display: "فين شكل زي ده؟", clips: [QT.whereShape] };
+      q.hint = { model: { kind: "shapeCard", ref: t } };
       q.target = { kind: "shape", ref: t };
     }
     questions.push(q);
@@ -270,7 +267,7 @@ function derange(arr, rng) {
   return arr.slice(1).concat(arr[0]);
 }
 
-function boardQuestion(levelId, i, prompt, hintSpoken, pairs, skills, rng) {
+function boardQuestion(levelId, i, prompt, pairs, skills, rng) {
   const ids = pairs.map((p) => p.id);
   return {
     id: `${levelId}:q${i + 1}`,
@@ -278,7 +275,7 @@ function boardQuestion(levelId, i, prompt, hintSpoken, pairs, skills, rng) {
     type: "pairs",
     skills,
     prompt,
-    hint: { spoken: hintSpoken, model: null },
+    hint: { model: null },
     pairs,
     keysOrder: ids,
     matchesOrder: derange(ids, rng),
@@ -300,16 +297,15 @@ function bridgeLevel(bi) {
           id: `p${ch}`,
           key: { kind: "letter", ref: ch },
           match: { kind: "word", ref: ch },
-          keySpoken: l.nameSpoken,
-          matchSpoken: l.wordSpoken,
+          keyClips: [letterKey(ch)],
+          matchClips: [wordKey(ch)],
         };
       });
       questions.push(
         boardQuestion(
           id,
           i,
-          { display: "وصّلي كل حرف بصورته", spoken: "دوسي على حرف، وبعدين دوسي على الصورة اللي بتبدأ بيه" },
-          "دوسي على الحرف الأول، وبعدين على صورته",
+          { display: "وصّلي كل حرف بصورته", clips: [MATCH_INSTRUCTION.letters] },
           pairs,
           set.map((c) => `letter:${c}`),
           rng
@@ -325,15 +321,14 @@ function bridgeLevel(bi) {
         id: `p${v}`,
         key: { kind: "numeral", ref: v },
         match: { kind: "qty", ref: v, item: item.id },
-        keySpoken: NUMBER_BY_VALUE[v].nameSpoken,
-        matchSpoken: qtyText(v, item).spoken,
+        keyClips: [numKey(v)],
+        matchClips: qtyClips(v, item.id),
       }));
       questions.push(
         boardQuestion(
           id,
           i,
-          { display: "وصّلي كل رقم بعدده", spoken: "دوسي على رقم، وبعدين دوسي على الصورة اللي فيها نفس العدد" },
-          "دوسي على الرقم الأول، وبعدين على العدد بتاعه",
+          { display: "وصّلي كل رقم بعدده", clips: [MATCH_INSTRUCTION.numbers] },
           pairs,
           set.map((v) => `number:${v}`),
           rng
@@ -349,15 +344,14 @@ function bridgeLevel(bi) {
       id: `p${c}`,
       key: { kind: "swatch", ref: c },
       match: { kind: "thing", ref: c },
-      keySpoken: COLOR_BY_ID[c].spoken,
-      matchSpoken: COLOR_BY_ID[c].thingSpoken,
+      keyClips: [colorKey(c)],
+      matchClips: [thingKey(c)],
     }));
     questions.push(
       boardQuestion(
         id,
         i,
-        { display: "وصّلي كل لون بحاجة لونها زيه", spoken: "دوسي على لون، وبعدين دوسي على حاجة لونها زيه" },
-        "دوسي على اللون الأول، وبعدين على الحاجة اللي لونها زيه",
+        { display: "وصّلي كل لون بحاجة لونها زيه", clips: [MATCH_INSTRUCTION.colors] },
         pairs,
         set.map((c) => `color:${c}`),
         rng
@@ -370,15 +364,14 @@ function bridgeLevel(bi) {
       id: `p${s}`,
       key: { kind: "shapeOutline", ref: s },
       match: { kind: "shape", ref: s },
-      keySpoken: SHAPE_BY_ID[s].spoken,
-      matchSpoken: SHAPE_BY_ID[s].spoken,
+      keyClips: [shapeKey(s)],
+      matchClips: [shapeKey(s)],
     }));
     questions.push(
       boardQuestion(
         id,
         colorBoards.length + j,
-        { display: "وصّلي كل شكل بالشكل اللي زيه", spoken: "دوسي على شكل، وبعدين دوسي على الشكل اللي زيه" },
-        "دوسي على الشكل الأول، وبعدين على الشكل اللي زيه",
+        { display: "وصّلي كل شكل بالشكل اللي زيه", clips: [MATCH_INSTRUCTION.shapes] },
         pairs,
         set.map((s) => `shape:${s}`),
         rng

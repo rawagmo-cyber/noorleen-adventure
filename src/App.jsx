@@ -1,17 +1,15 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { GAME_TITLE } from "./config.js";
 import { GameProvider, useGame } from "./state/GameContext.jsx";
-import { cancel, retryAudio } from "./services/speech.js";
+import { cancel, playClips, unlockAudio as unlockClips } from "./audio/audioService.ts";
+import { WELCOME_KEY, LETS_PLAY_KEY } from "./audio/clips.js";
 import { unlockAudio, sfxTap } from "./services/sfx.js";
-import { prime } from "./services/speech.js";
-import { Welcome, SoundCheck, MapScreen, StageScreen, Tutorial, Celebration, Rest, StickersScreen } from "./screens/MainScreens.jsx";
+import { Welcome, MapScreen, StageScreen, Tutorial, Celebration, Rest, StickersScreen } from "./screens/MainScreens.jsx";
 import LevelScreen from "./screens/LevelScreen.jsx";
 import ParentScreen from "./screens/ParentScreen.jsx";
-import { AudioBlocked, useAudioInfo, audioBad } from "./components/ui.jsx";
 
 function Router() {
   const game = useGame();
-  const info = useAudioInfo();
   const [screen, setScreen] = useState({ name: "welcome" });
 
   const go = useCallback((name, params = {}) => {
@@ -31,36 +29,25 @@ function Router() {
     return () => document.removeEventListener("visibilitychange", onHide);
   }, []);
 
-  const blocked = audioBad(info.status) && !game.settings.assistedMode;
-  const playScreen = screen.name === "level" || screen.name === "tutorial";
   const backToMap = () => go("map");
-
-  if (playScreen && blocked) {
-    return (
-      <AudioBlocked
-        info={info}
-        onBack={backToMap}
-        onRetry={() => retryAudio()}
-        onAssist={() => game.updateSettings({ assistedMode: true })}
-      />
-    );
-  }
 
   switch (screen.name) {
     case "welcome":
       return (
         <Welcome
           onStart={() => {
+            // لمسة فتح الصوت: بتشغّل مقطع فعلي في نفس معالج الضغطة
             unlockAudio();
-            prime();
+            unlockClips();
             sfxTap();
-            go(game.progress.soundChecked ? "map" : "soundcheck");
+            go("map");
+            const first = !game.progress.welcomed;
+            playClips(first ? [WELCOME_KEY, LETS_PLAY_KEY] : [LETS_PLAY_KEY]);
+            if (first) game.patchProgress({ welcomed: true });
           }}
           onParent={() => go("parent", { from: "welcome" })}
         />
       );
-    case "soundcheck":
-      return <SoundCheck onDone={backToMap} onParentVoice={() => go("parent", { from: "soundcheck", tab: "voice" })} />;
     case "map":
       return (
         <MapScreen
@@ -93,7 +80,7 @@ function Router() {
       return (
         <ParentScreen
           startTab={screen.tab || "progress"}
-          onExit={() => go(screen.from === "soundcheck" ? "soundcheck" : screen.from === "welcome" ? "welcome" : "map")}
+          onExit={() => go(screen.from === "welcome" ? "welcome" : "map")}
           onPlayLevel={(levelId) => {
             // شاشة الأهل بتسمح بفتح أي مرحلة حتى لو مقفولة
             const lv = levelId;
