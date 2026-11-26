@@ -229,7 +229,7 @@ export function Tutorial({ onDone, onExit }) {
   const mounted = useMounted();
   const [done, setDone] = useState(false);
   const [nudge, setNudge] = useState(0);
-  const [heroState, flashHero, heroPulse] = useHeroState();
+  const [heroState, flashHero, heroPulse] = useHeroState("think");
   const locked = useRef(false);
   const say = () => playClips(TUTORIAL_CLIPS, { instruction: true });
   useEffect(() => {

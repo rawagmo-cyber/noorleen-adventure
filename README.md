@@ -21,13 +21,13 @@ npm run preview
 ## النشر (من غير ما نكون نشرنا فعلًا)
 **Vercel:** ارفعي المشروع على GitHub، وادخلي vercel.com واختاري المشروع. الإعدادات: Build = `npm run build`، Output = `dist`.
 
-**Firebase Hosting:**
+**Firebase Hosting** (ملف `firebase.json` جاهز في المشروع):
 ```
 npm install -g firebase-tools
 firebase login
-firebase init hosting     # اختاري فولدر dist، و Single-page app = Yes
+firebase use --add        # اختاري مشروع Firebase (أو اعملي مشروع جديد من console.firebase.google.com)
 npm run build
-firebase deploy
+firebase deploy --only hosting
 ```
 لازم تفتحي الرابط على موبايل/تابلت حقيقي وتجربي الصوت قبل ما تدّيها للبنت. (الصوت محتاج HTTPS أو localhost.)
 
@@ -48,6 +48,9 @@ firebase deploy
 - **أصوات الحروف:** سماع اسم كل حرف وكلمته (تسجيلات جاهزة) وصوته المنفرد (صوت الجهاز). الصوت المنفرد مش بيتعلّم غير بعد ما تسمعيه وتوافقي عليه.
 - **الإعدادات:** الموسيقى، المؤثرات، تقليل الحركة، اسم الدلع في التشجيع، وفتح كل المراحل.
 - **البيانات:** مسح التقدّم (بتأكيد تاني).
+
+## أيقونة اللعبة
+أيقونة اللعبة (التبويب وشاشة الموبايل الرئيسية) من صورة وش نورلين: `public/icons/` (favicon و apple-touch-icon و 192 و 512). لتغييرها بدّلي الملفات بنفس الأسماء. ملف `manifest.webmanifest` بيتولّد تلقائيًا باسم اللعبة من `src/config.js`. على الموبايل: من قائمة المتصفح اختاري "إضافة إلى الشاشة الرئيسية".
 
 ## الصوت
 - كل الكلام من ملفات `public/audio/*.mp3` (١٣٣ مقطع). مرجع المفاتيح والنصوص الوحيد: `src/audio/manifest.json`.

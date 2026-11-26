@@ -213,7 +213,7 @@ function PickQuestion({ q, index, total, onComplete, onExit }) {
   const [wrong, setWrong] = useState([]);
   const [hint, setHint] = useState(false);
   const [helpId, setHelpId] = useState(null);
-  const [heroState, flashHero, heroPulse] = useHeroState();
+  const [heroState, flashHero, heroPulse] = useHeroState("think");
   const [done, setDone] = useState(null);
   const [praiseText, setPraiseText] = useState("");
   const counter = useCounter(q.countTarget ? q.countTarget.value : 0);
@@ -330,7 +330,7 @@ function PairsQuestion({ q, index, total, onComplete, onExit }) {
   const [matched, setMatched] = useState([]);
   const [helpIds, setHelpIds] = useState(null);
   const [hint, setHint] = useState(false);
-  const [heroState, flashHero, heroPulse] = useHeroState();
+  const [heroState, flashHero, heroPulse] = useHeroState("think");
   const [done, setDone] = useState(false);
   const [praiseText, setPraiseText] = useState("");
   const wrongSince = useRef(0); // أخطاء من آخر توصيلة
